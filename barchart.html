@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ageing Population Data Visualization</title>
+    <!-- 引用 Chart.js 3.x 版本 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- 引用 Papa Parse 用于解析 CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+        .container { width: 80%; margin: 20px auto; }
+        canvas { width: 100%; max-width: 800px; }
+        .slider { width: 50%; margin: 20px auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="myChart"></canvas>
+        <input type="range" min="1950" max="2021" value="1950" class="slider" id="yearSlider">
+        <p>Year: <span id="yearDisplay">1950</span></p>
+    </div>
+
+    <script>
+        const dataByYear = {}; // 全局存储按年份分类的数据
+
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('https://raw.githubusercontent.com/fry222/first1/main/data2.csv').then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.text();
+            })
+            .then(data => {
+                const jsonData = Papa.parse(data, {
+                    header: true,
+                    dynamicTyping: true
+                }).data;
+                processExcelData(jsonData);
+                updateChart(1950); // 初始显示1950年的数据
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+
+            let currentYear = 1950;
+            const intervalId = setInterval(() => {
+                if (currentYear > 2021) {
+                    clearInterval(intervalId);
+                    currentYear = 1950;
+                } else {
+                    document.getElementById('yearSlider').value = currentYear;
+                    document.getElementById('yearDisplay').textContent = currentYear;
+                    updateChart(currentYear);
+                    currentYear++;
+                }
+            }, 250);
+
+            document.getElementById('yearSlider').addEventListener('input', function() {
+                clearInterval(intervalId);
+                updateChart(this.value);
+                document.getElementById('yearDisplay').textContent = this.value;
+            });
+        });
+
+        function processExcelData(data) {
+            data.forEach(item => {
+                if (item.Type === "Country/Area") {
+                    const year = item.Year;
+                    const country = item["Region, subregion, country or area"];
+                    const percentage = parseFloat(item["65+"]);
+
+                    if (!dataByYear[year]) dataByYear[year] = [];
+                    dataByYear[year].push({ country, percentage });
+                }
+            });
+
+            Object.keys(dataByYear).forEach(year => {
+                dataByYear[year].sort((a, b) => b.percentage - a.percentage);
+                dataByYear[year] = dataByYear[year].slice(0, 10); // 取百分比最高的前十个
+            });
+        }
+
+const colorMapping = {}; // 存储每个国家的颜色映射
+
+function getRandomColor() {
+    const r = Math.floor(Math.random() * 256);
+    const g = Math.floor(Math.random() * 256);
+    const b = Math.floor(Math.random() * 256);
+    return `rgba(${r},${g},${b},1)`;
+}
+
+function ensureColor(country) {
+    if (!colorMapping[country]) {
+        colorMapping[country] = getRandomColor(); // 如果国家还没有颜色，生成一个新的
+    }
+    return colorMapping[country];
+}
+
+function updateChart(year) {
+    const ctx = document.getElementById('myChart').getContext('2d');
+    const chartData = {
+        labels: dataByYear[year].map(item => item.country),
+        datasets: [{
+            label: `Percentage of Population Aged 65+ in ${year}`,
+            data: dataByYear[year].map(item => item.percentage),
+            backgroundColor: dataByYear[year].map(item => ensureColor(item.country)), // 使用或生成颜色
+            borderColor: dataByYear[year].map(item => ensureColor(item.country)), // 边框使用相同颜色
+            borderWidth: 1
+        }]
+    };
+
+    if (window.myBarChart) {
+        window.myBarChart.destroy();
+    }
+    window.myBarChart = new Chart(ctx, {
+        type: 'bar',
+        data: chartData,
+        options: {
+            animation: {
+                duration: 0
+            },
+            indexAxis: 'y',
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    suggestedMax: 40
+                },
+                y: {
+                    display: false
+                }
+            },
+            plugins: {
+                tooltip: {
+                    enabled: true
+                }
+            }
+        },
+        plugins: [{
+            id: 'textLabels',
+            afterDraw: chart => {
+                const ctx = chart.ctx;
+                ctx.font = '12px Arial';
+                ctx.fillStyle = 'black';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                chart.data.datasets.forEach((dataset, i) => {
+                    const meta = chart.getDatasetMeta(i);
+                    meta.data.forEach((bar, index) => {
+                        const label = chart.data.labels[index];
+                        const labelX = bar.x + 5;
+                        const labelY = bar.y;
+                        ctx.fillText(label, labelX, labelY);
+                    });
+                });
+                ctx.font = 'bold 40px Arial';
+                ctx.fillStyle = 'gray';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'bottom';
+                const chartWidth = chart.width;
+                const chartHeight = chart.height;
+                ctx.fillText(` ${year}`, chartWidth - 100, chartHeight - 100);
+            }
+        }]
+    });
+}
+
+    </script>
+</body>
+</html>
